@@ -1,0 +1,340 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<title>脱げ！マヨイくん Another</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<meta http-equiv="Content-Security-Policy" content="default-src * data: gap: content: https://ssl.gstatic.com; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval'">
+	<script src="https://code.createjs.com/1.0.0/createjs.min.js"></script>
+	<script src="components/loader.js"></script>
+	<style>
+		html {
+			background-color: black;
+		}
+
+		canvas {
+			display: block;
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="text/javascript">
+		window.addEventListener("load", init);
+
+    function init(){
+      const target = 'myCanvas';
+      const canvas = document.getElementById(target);
+      const stage = new createjs.Stage(target);
+
+      // デバッグ用クリックイベントのエラー回避
+      createjs.DisplayObject.suppressCrossDomainErrors = true;
+
+      // リサイズイベントを検知してリサイズ処理を実行
+      window.addEventListener("resize", handleResize);
+      handleResize(); // 起動時にもリサイズしておく
+
+      //------------------------------
+      // リサイズ処理
+      //------------------------------
+      function handleResize(event) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        if (window.devicePixelRatio) {
+          canvas.width *= devicePixelRatio;
+          canvas.height *= devicePixelRatio;
+          stage.scaleX = stage.scaleY = window.innerWidth / 1440 * window.devicePixelRatio;
+        }
+        stage.update();
+      }
+
+      // 加速度センサー用
+      var y;
+      var size = 20;
+      // シーン管理
+      var fever = false;
+      var feverCount = 0;
+      var panichi = false;
+      var yabai = 0;
+      var phase = 0; // 0：スタート前、1：スタート後、2：脱衣
+
+      // 背景
+      var fill = new createjs.Shape();
+      fill.graphics.beginFill("White");
+      fill.graphics.drawRect(0, 0, 1440, 2560);
+      fill.alpha = 0;
+
+      var startimg = new createjs.Bitmap("image/start.png");
+      var bg = new createjs.Bitmap("image/bg_h.png");
+      var endimg = new createjs.Bitmap("image/endimg.png");
+      endimg.alpha = 0;
+
+      // キャラ
+      var img00 = new createjs.Bitmap("image/img00_h.png");
+      var img01 = new createjs.Bitmap("image/img01_h.png");
+
+      // 吹き出し
+      var balloon1 = new createjs.Bitmap("image/balloon1.png");
+      var balloon2 = new createjs.Bitmap("image/balloon2.png");
+      balloon1.alpha = 0;
+      balloon2.alpha = 0;
+
+      // テキスト
+      var endtxt = new createjs.Bitmap("image/endtxt_h.png");
+      endtxt.alpha = 0;
+
+      stage.addChild(bg);
+      stage.addChild(img00);
+      stage.addChild(img01);
+      stage.addChild(balloon1);
+      stage.addChild(balloon2);
+      stage.addChild(startimg);
+      stage.addChild(endimg);
+      stage.addChild(endtxt);
+
+      var particles = [];
+      var count = 0;
+
+      //------------------------------
+      // 時間経過で更新
+      //------------------------------
+      createjs.Ticker.addEventListener("tick", handleTick);
+      function handleTick() {
+        if (phase) {
+          // シーン遷移
+          if (phase == 1){
+            // fever管理
+            if (fever) {
+              // カウント加算
+              emitParticles();
+              feverCount ++;
+              fever = false;
+            } else if (img01.alpha >= 1) {
+              // 操作なしで減算
+              img01.alpha = 1;
+              feverCount -= 2;
+
+              // マイナスにはしない
+              if (feverCount <= 0) {
+               feverCount = 0;
+              }
+            } else {
+              // 服を着ようとする力
+              img01.alpha += 0.1;
+              if (img01.alpha <= 0) {
+               img01.alpha = 0;
+              }
+            }
+            if (feverCount >= 66) {
+              flash();
+            }
+          }
+
+          if (phase == 2) {
+            img01.alpha = 0;
+
+            if (yabai >= 666) {
+              flash();
+            }
+          }
+
+          if (phase == 3) {
+           gameClear();
+          }
+        }
+          updateParticles();
+          stage.update();
+      }
+
+      //------------------------------
+      // クリックイベント
+      //------------------------------
+      canvas.addEventListener("click", handleClick);
+      function handleClick(event){
+        // デバッグ用
+        // if (phase == 2) {
+        //   showBalloon();
+        //   yabai ++;
+        // } else if (phase) {
+        //   img01.alpha -= 0.2;
+        // } else {
+        //   gameStart();
+        // }
+
+        if (!phase) {
+          gameStart();
+        }
+
+        if (img01.alpha <= 0.8) {
+          fever = true;
+          feverCount ++;
+        }
+      }
+
+      //------------------------------
+      // 振ると透ける
+      //------------------------------
+      window.addEventListener("devicemotion", function(event) {
+      y = event.acceleration.y;
+
+      if (y < -size || y > size && phase > 0) {
+        if (y < -size * 2.5 || y > size * 2.5) {
+          // 力強く振ってるとfeverでパーティクルが出る
+          fever = true;
+        }
+
+        // 服着てるなら透けさす
+        if (phase == 1) {
+        img01.alpha -= 0.02;
+        }
+
+        // 着てないならヤバくなる
+        if (phase == 2) {
+          showBalloon();
+          yabai ++;
+        }
+      }
+     })
+
+      //------------------------------
+      // パーティクル
+      //------------------------------
+
+      // パーティクル発生
+      function emitParticles() {
+        // EmissionごとにX,Yは固定
+        var x = canvas.width * Math.random();
+        var y = canvas.height * Math.random();
+
+        for (var i = 0; i < 12; i++) {
+          var particle = new createjs.Bitmap("image/heart.png");
+          stage.addChild(particle);
+
+          // 発生場所
+          particle.x = x;
+          particle.y = y;
+
+          // パーティクルの色とサイズ
+          particle.alpha = 0.5;
+          particle.compositeOperation = "lighter";
+          particle.scale = window.devicePixelRatio * Math.random();
+
+          // 速度
+          particle.vx = 50 * (Math.random() - 0.5);
+          particle.vy = 50 * (Math.random() - 0.5);
+
+          // 寿命
+          particle.life = 50;
+
+          particles.push(particle);
+        }
+      }
+
+      // パーティクル更新
+      function updateParticles() {
+        for (var i = 0; i < particles.length; i++) {
+          var particle = particles[i];
+
+          // 重力
+          particle.vy += 0.5;
+
+          // 摩擦
+          particle.vx *= 0.9;
+          particle.vy *= 0.9;
+
+          // 速度を位置に適用
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+
+          // 寿命を減らす
+          particle.life -= 1;
+          particle.alpha -= 0.025;
+
+          // 寿命の判定
+          if (particle.life <= 0) {
+            stage.removeChild(particle);
+            particles.splice(i, 1);
+          }
+        }
+      }
+
+    //------------------------------
+    // 演出
+    //------------------------------
+
+    // ゲームスタート
+    function gameStart() {
+      console.log("Start!");
+      deviceMotionRequest();
+      createjs.Tween.get(startimg).to({alpha:0}, 200);
+      phase = 1;
+    }
+
+    // 白フェード
+    function flash() {
+      stage.addChild(fill);
+
+      createjs.Tween.get(fill).to({alpha:1}, 150).wait(100).to({alpha:0}, 600);
+
+      if (phase <= 2 ) {
+        phase ++
+      }
+      createjs.Tween.get(endtxt).wait(1000).to({alpha:1}, 300);
+      console.log(phase);
+    }
+
+    // 吹き出し表示
+    function showBalloon() {
+      // if (Math.random() >= 0.5) {
+      //   createjs.Tween.get(balloon1).to({alpha:1}, 100).wait(200).to({alpha:0}, 100);
+      // } else if (Math.random() <= 0.5) {
+      //   createjs.Tween.get(balloon2).to({alpha:1}, 100).wait(200).to({alpha:0}, 100);
+      // }
+    }
+
+     // ゲームクリア
+    function gameClear() {
+      phase ++;
+      createjs.Tween.get(endimg).to({x:canvas.width * -1}, 0).to({alpha:1, x:0}, 500, createjs.Ease.backOut);
+      createjs.Tween.get(endtxt).wait(1000).to({alpha:1}, 300);
+    }
+
+    // 終了したら止めたかったんだけどなんか上手く動かなかった
+    function stop() {
+      createjs.Ticker.removeAllEventListeners();
+      stage.removeAllEventListeners();
+    }
+  }
+
+  //------------------------------
+  // iOS13+対策
+  //------------------------------
+  function deviceMotionRequest() {
+    if (DeviceMotionEvent.requestPermission) {
+    DeviceMotionEvent.requestPermission()
+    .then(permissionState => {
+      if (permissionState === 'granted') {
+        window.addEventListener("devicemotion", function(event) {
+          if (!event.accelerationIncludingGravity) {
+            alert('event.accelerationIncludingGravity is null');
+            return;
+          }
+        })
+      }
+    })
+      .catch(console.error);
+    }
+  }
+	</script>
+	<link rel="stylesheet" href="components/loader.css">
+</head>
+
+<body onload="init();">
+	<canvas id="myCanvas" width="90" height="160"></canvas>
+</body>
+
+</html>
